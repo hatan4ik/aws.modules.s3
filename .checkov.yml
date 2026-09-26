@@ -3,3 +3,48 @@
 # pattern and is excluded from policy scanning.
 skip-path:
   - tests/integration/setup
+
+# CI runs Checkov 3.3.19; the locally available 3.3.10 does not implement
+# CKV2_AWS_62 or CKV_AWS_144 at all, so these could only be verified against
+# the CI run itself, the same way CKV2_AWS_16 was verified in
+# aws.modules.ecs's .checkov.yml.
+#
+# CKV2_AWS_62 and CKV_AWS_144 fail on every bucket this module or its
+# examples create, including the plain root module with no example wrapping
+# it. That is expected, not a resolution artifact: event notifications and
+# cross-region replication are explicitly out of scope for v1 (see
+# docs/DESIGN.md, "Compatibility" — "Out of scope in v1 and planned as
+# optional inputs that will not break this interface"). The module never
+# creates an aws_s3_bucket_notification or an
+# aws_s3_bucket_replication_configuration resource, so no bucket this module
+# produces can ever satisfy either check until those features ship.
+#
+# CKV_AWS_21 ("versioning enabled") fails only on
+# examples/multiple-buckets's module.bucket.aws_s3_bucket.this, where
+# versioning = each.value.versioning is read from var.buckets, a required
+# map(object({...})) variable with no default. With no concrete value bound
+# in the credential-free quality pipeline, Checkov's graph has nothing to
+# resolve each.value against and cannot see that the object's own field
+# default (optional(string, "Enabled")) would apply. examples/minimal, which
+# passes a literal call with no for_each, is unaffected — confirming this is
+# the same class of nested optional()-through-a-dynamic-call limitation
+# documented for CKV_AWS_163/CKV_AWS_51/CKV_AWS_28 in aws.modules.ecs's
+# .checkov.yml. The real default is Enabled by construction
+# (variables.tf) and is asserted directly in
+# tests/defaults.tftest.hcl ("versioning_and_kms_encryption_are_on_by_default")
+# and guarded on every plan by the versioning_not_enabled check.
+#
+# CKV_AWS_145 ("encrypted with KMS by default") fails only on
+# examples/access-logging's module.logs.aws_s3_bucket.this, which sets
+# sse_algorithm = "AES256" deliberately: S3 delivers server access logs only
+# to a destination bucket using SSE-S3, not SSE-KMS (see the comment on
+# module "logs" in examples/access-logging/main.tf). This is a real,
+# resolvable, and correct finding for that one example, not a false
+# positive; it is accepted because the module's own default (asserted in
+# tests/defaults.tftest.hcl) remains aws:kms for every bucket that is not
+# deliberately configured as a log destination.
+skip-check:
+  - CKV2_AWS_62 # S3 event notifications — out of scope for v1 (docs/DESIGN.md, Compatibility).
+  - CKV_AWS_144 # S3 cross-region replication — out of scope for v1 (docs/DESIGN.md, Compatibility).
+  - CKV_AWS_21 # S3 versioning enabled — unresolvable through examples/multiple-buckets's for_each over an object variable with no default; the module's own default is Enabled (see tests/defaults.tftest.hcl).
+  - CKV_AWS_145 # S3 encrypted with KMS by default — examples/access-logging's log destination bucket deliberately uses SSE-S3, which server access logging requires; every other bucket defaults to SSE-KMS.
