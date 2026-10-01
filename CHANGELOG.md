@@ -6,6 +6,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+
+- `modules/bucket-policy` rejects at plan an `Allow` statement for the wildcard principal (`principal_all = true`, or `"*"` as a principal identifier) that carries no condition. The root module keeps `block_public_policy` on, so S3 already rejected such a policy at apply; the module now fails earlier, matching `aws.modules.dynamodb` and `aws.modules.ksm`. Any configuration newly rejected here could never have applied, so this is not a behaviour change for a working configuration.
+- `modules/bucket-policy` rejects a statement that repeats the same condition `test` and `variable` with a named validation; it previously failed at plan with Terraform's internal `Duplicate object key` error.
+- `modules/bucket-policy` fails its `json` output at plan when the rendered document exceeds the 20 KB S3 bucket policy limit, instead of at `PutBucketPolicy`.
+- The integration workflow's version comments on the Dependabot-bumped `actions/checkout` (v7.0.1) and `aws-actions/configure-aws-credentials` (v6.3.0) pins now match the pinned SHAs.
+
+### Documentation
+
+- README, `modules/bucket-policy` README, and `docs/DESIGN.md` describe the wildcard-`Allow` rule, the 20 KB limit, and the self-lockout risk of an unconditioned `Deny` for the wildcard principal, with how to exempt administering principals.
+
 ## [1.0.0] - 2026-09-25
 
 Breaking release. One module call still provisions one private bucket. [docs/UPGRADE-1.0.md](docs/UPGRADE-1.0.md) maps every 0.1.x input and output to its replacement; every resource address is unchanged, so no `moved` blocks are needed.
