@@ -323,3 +323,106 @@ run "rejects_malformed_kms_key_arn" {
 
   expect_failures = [var.kms_key_arn]
 }
+
+run "renders_wildcard_allow_scoped_by_a_condition" {
+  command = plan
+
+  variables {
+    statements = {
+      ReadFromOrganization = {
+        principal_all = true
+        actions       = ["s3:GetObject"]
+        conditions    = [{ test = "StringEquals", variable = "aws:PrincipalOrgID", values = ["o-abcdef1234"] }]
+      }
+    }
+  }
+
+  assert {
+    condition     = jsondecode(output.json).Statement[1].Sid == "ReadFromOrganization" && jsondecode(output.json).Statement[1].Principal == "*" && jsondecode(output.json).Statement[1].Condition.StringEquals["aws:PrincipalOrgID"] == ["o-abcdef1234"]
+    error_message = "A wildcard Allow carrying a condition must render with its condition."
+  }
+}
+
+run "rejects_unconditioned_allow_for_all_principals" {
+  command = plan
+
+  variables {
+    statements = {
+      PublicRead = {
+        principal_all = true
+        actions       = ["s3:GetObject"]
+      }
+    }
+  }
+
+  expect_failures = [var.statements]
+}
+
+run "rejects_unconditioned_allow_for_a_wildcard_identifier" {
+  command = plan
+
+  variables {
+    statements = {
+      PublicRead = {
+        principals = { AWS = ["*"] }
+        actions    = ["s3:GetObject"]
+      }
+    }
+  }
+
+  expect_failures = [var.statements]
+}
+
+run "rejects_repeated_condition_test_and_variable" {
+  command = plan
+
+  variables {
+    statements = {
+      ReadOnly = {
+        principals = { AWS = ["arn:aws:iam::123456789012:role/analytics"] }
+        actions    = ["s3:GetObject"]
+        conditions = [
+          { test = "StringEquals", variable = "aws:PrincipalOrgID", values = ["o-abcdef1234"] },
+          { test = "StringEquals", variable = "aws:PrincipalOrgID", values = ["o-fedcba4321"] },
+        ]
+      }
+    }
+  }
+
+  expect_failures = [var.statements]
+}
+
+run "rejects_policy_larger_than_the_s3_limit" {
+  command = plan
+
+  variables {
+    statements = {
+      ReadManyPrefixes = {
+        principals = { AWS = ["arn:aws:iam::123456789012:role/analytics"] }
+        actions    = ["s3:GetObject"]
+        resources  = [for index in range(600) : "arn:aws:s3:::orders-data/tenant-${index}/*"]
+      }
+    }
+  }
+
+  expect_failures = [output.json]
+}
+
+run "accepts_policy_just_under_the_s3_limit" {
+  command = plan
+
+  variables {
+    statements = {
+      ReadManyPrefixes = {
+        principals = { AWS = ["arn:aws:iam::123456789012:role/analytics"] }
+        actions    = ["s3:GetObject"]
+        resources  = [for index in range(400) : "arn:aws:s3:::orders-data/tenant-${index}/*"]
+      }
+    }
+  }
+
+  assert {
+    condition     = length(output.json) <= 20480 && length(output.json) > 15000
+    error_message = "A document under 20 KB must render."
+  }
+}

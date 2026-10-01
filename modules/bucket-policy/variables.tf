@@ -69,6 +69,24 @@ variable "statements" {
     ]]))
     error_message = "statements[*].conditions entries need a non-empty test, variable, and at least one value."
   }
+
+  # Conditions are rendered as a map keyed by test, then by variable, so a
+  # repeated pair would otherwise surface as Terraform's own duplicate-key error.
+  validation {
+    condition     = alltrue([for statement in values(var.statements) : length(distinct([for condition in statement.conditions : "${condition.test}:${condition.variable}"])) == length(statement.conditions)])
+    error_message = "statements[*].conditions must not repeat the same test and variable within one statement; list every value in a single condition instead."
+  }
+
+  # The root module keeps all four public access blocks on, and S3 rejects a
+  # policy that grants public access while block_public_policy is set. An
+  # unconditioned wildcard Allow is always public, so it is rejected here rather
+  # than at apply.
+  validation {
+    condition = alltrue([for statement in values(var.statements) :
+      statement.effect != "Allow" || length(statement.conditions) > 0 || !(statement.principal_all || anytrue([for identifiers in values(statement.principals) : contains(identifiers, "*")]))
+    ])
+    error_message = "An Allow statement with a wildcard principal (principal_all = true, or \"*\" as an identifier) must carry at least one condition; an unconditioned wildcard Allow is a public policy, which the public access block rejects."
+  }
 }
 
 variable "deny_insecure_transport" {

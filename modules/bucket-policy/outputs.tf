@@ -11,6 +11,13 @@ output "json" {
     condition     = alltrue([for resource in local.declared_resources : resource == var.bucket_arn || startswith(resource, "${var.bucket_arn}/")])
     error_message = "Every statements[*].resources entry must be bucket_arn or an object path under it (<bucket_arn>/...); a bucket policy cannot reference another bucket."
   }
+
+  # S3 limits a bucket policy to 20 KB. The rendered document is minified JSON,
+  # so its length is the size S3 evaluates.
+  precondition {
+    condition     = length(local.json == null ? "" : local.json) <= 20480
+    error_message = "The rendered bucket policy is ${length(local.json == null ? "" : local.json)} characters; S3 limits a bucket policy to 20 KB (20480 bytes). Merge statements, share conditions, or use wildcards in resources to shrink it."
+  }
 }
 
 output "statement_count" {
