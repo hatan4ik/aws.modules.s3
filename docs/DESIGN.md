@@ -140,7 +140,22 @@ replication, or notifications: `id`, `arn`, `bucket_domain_name`,
   `DenyIncorrectEncryptionKey` (the KMS key header must name `kms_key_arn`).
 - Declared statements are typed: `Sid` is validated, principals are typed by
   kind, resources default to the bucket and its objects, conditions are
-  grouped by test. Reserved guardrail Sids cannot be shadowed.
+  grouped by test. Reserved guardrail Sids cannot be shadowed. A repeated
+  condition test and variable pair is rejected by name rather than by
+  Terraform's duplicate-key error.
+- An `Allow` for the wildcard principal must carry a condition. The public
+  access block is always on, so S3 would reject the unconditioned form at
+  apply; rejecting it at plan matches `aws.modules.dynamodb` and
+  `aws.modules.ksm`. Whether a conditioned wildcard `Allow` counts as public
+  is still decided by S3 at apply (it depends on the condition key and value).
+- The rendered document must fit the 20 KB S3 bucket policy limit; a
+  precondition on the submodule's `json` output fails the plan otherwise.
+- Not guarded: a `Deny` for the wildcard principal is accepted without a
+  condition, because scoped denies for every principal are a legitimate
+  control. An unconditioned `Deny s3:*` (or one whose condition every request
+  satisfies) also denies the bucket owner and the Terraform role, so the next
+  apply cannot remove it and only the account root user can recover the
+  bucket. The READMEs call this out next to the statement documentation.
 - The module never adds an ACL, a public policy, or a notification, and never
   reads from the account at plan time.
 
@@ -153,7 +168,8 @@ replication, or notifications: `id`, `arn`, `bucket_domain_name`,
   `check`.
 - `modules/bucket-policy/tests/` exercises the renderer without any provider:
   each guardrail, statement merging and ordering, principal and Sid
-  validation, condition grouping, the empty document, and the key requirement.
+  validation, condition grouping and uniqueness, the wildcard-Allow condition
+  rule, the 20 KB size limit, the empty document, and the key requirement.
 - Every example is initialised and validated in CI; examples are the
   documentation's executable form.
 - Static policy: `tflint` with the AWS ruleset, Checkov, Trivy; generated docs
