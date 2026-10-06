@@ -1,8 +1,11 @@
 # tests/integration/setup is short-lived fixture scaffolding evaluated by the
-# integration suites in the caller's own account; it is not a deployable
-# pattern and is excluded from policy scanning.
+# integration suites in the caller's own account, and tests/setup/key-and-bucket
+# is a root the contract tests plan under mock_provider (a KMS key and the
+# bucket in one configuration) and discard; neither is a deployable pattern
+# and both are excluded from policy scanning.
 skip-path:
   - tests/integration/setup
+  - tests/setup/key-and-bucket
 
 # CI runs Checkov 3.3.19; the locally available 3.3.10 does not implement
 # CKV2_AWS_62 or CKV_AWS_144 at all, so these could only be verified against

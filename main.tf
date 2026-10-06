@@ -264,12 +264,28 @@ module "bucket_policy" {
   kms_key_arn                     = var.kms_key_arn
   # The encryption configuration's precondition reports a missing key with one
   # actionable error; the renderer receives a consistent pair so the plan does
-  # not carry a second one.
-  deny_incorrect_encryption_key = var.deny_incorrect_encryption_key && var.kms_key_arn != null
+  # not carry a second one. A conditional rather than `&&`: when the key is
+  # created in the same configuration its ARN is unknown until apply, and
+  # `false && unknown` is unknown, which would make the whole rendered document
+  # unknown although no statement names the key.
+  deny_incorrect_encryption_key = var.deny_incorrect_encryption_key ? var.kms_key_arn != null : false
 }
 
 resource "aws_s3_bucket_policy" "this" {
-  count = local.policy_json == null ? 0 : 1
+  # Decided from the inputs alone, never from the rendered document: count
+  # must be known at plan, and the document is not when a statement names a
+  # kms_key_arn created in the same configuration. The renderer returns a
+  # document exactly when at least one statement exists, that is when a
+  # guardrail is enabled or a statement is declared; the override replaces the
+  # composition. deny_incorrect_encryption_key without a key never reaches a
+  # plan, because the encryption configuration's precondition rejects it first.
+  count = (
+    var.policy_json_override != null
+    || length(var.bucket_policy_statements) > 0
+    || var.deny_insecure_transport
+    || var.deny_unencrypted_object_uploads
+    || var.deny_incorrect_encryption_key
+  ) ? 1 : 0
 
   bucket = aws_s3_bucket.this.bucket
   policy = local.policy_json
@@ -278,6 +294,17 @@ resource "aws_s3_bucket_policy" "this" {
     precondition {
       condition     = var.policy_json_override == null || (length(var.bucket_policy_statements) == 0 && !var.deny_insecure_transport && !var.deny_unencrypted_object_uploads && !var.deny_incorrect_encryption_key)
       error_message = "policy_json_override replaces the composed policy: leave bucket_policy_statements empty and set deny_insecure_transport, deny_unencrypted_object_uploads, and deny_incorrect_encryption_key to false, or drop the override and declare statements instead."
+    }
+
+    # The count follows the flags; the renderer renders the key guardrail only
+    # with a key. They disagree only when deny_incorrect_encryption_key is set
+    # without kms_key_arn and nothing else contributes a statement, a plan the
+    # encryption configuration already rejects; this names the cause here too
+    # instead of reporting the policy argument as missing. The condition is
+    # unknown while the document is, and is then checked at apply.
+    precondition {
+      condition     = local.policy_json != null
+      error_message = "deny_incorrect_encryption_key requires kms_key_arn: without the key the guardrail contributes no statement, and no other statement or override is declared, so there is no document to attach."
     }
   }
 
