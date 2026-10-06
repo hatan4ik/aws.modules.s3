@@ -83,7 +83,13 @@ to `modules/bucket-policy` together with the caller's statements and the
 guardrail flags. The submodule returns a JSON document or `null`; the root
 creates `aws_s3_bucket_policy.this[0]` only when there is a document, after the
 public access block exists (the S3 API rejects policies that grant public
-access once the block is on, and the block must win that race). Object Lock and
+access once the block is on, and the block must win that race). Whether there
+is a document is decided from the inputs (the override, the declared
+statements, and the guardrail flags), not by inspecting the rendered JSON: the
+submodule renders a document exactly when one of those contributes a
+statement, and the inputs are known at plan time even when the document is
+not, as when a guardrail names a `kms_key_arn` created in the same
+configuration and known only after apply. Object Lock and
 lifecycle configuration depend on versioning because the API requires it for
 Object Lock and for noncurrent-version rules.
 
@@ -164,8 +170,11 @@ replication, or notifications: `id`, `arn`, `bucket_domain_name`,
 - Contract tests use `mock_provider` with `command = plan`; no credentials.
 - Root `tests/` cover: secure defaults, every variable validation and
   precondition via `expect_failures`, every feature group, the policy
-  composition and the `policy_json_override` substitution, and each advisory
-  `check`.
+  composition and the `policy_json_override` substitution, when a policy
+  resource is planned at all (every boundary of the contributing inputs, and
+  a KMS key created in the same configuration through the
+  `tests/setup/key-and-bucket` fixture, whose ARN is unknown at plan), and
+  each advisory `check`.
 - `modules/bucket-policy/tests/` exercises the renderer without any provider:
   each guardrail, statement merging and ordering, principal and Sid
   validation, condition grouping and uniqueness, the wildcard-Allow condition

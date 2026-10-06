@@ -125,6 +125,18 @@ run "rejects_key_guardrail_without_a_key" {
   expect_failures = [aws_s3_bucket_server_side_encryption_configuration.this]
 }
 
+# With no other statement the policy resource is still counted from the flag
+# but has no document; it names the missing key too rather than reporting its
+# policy argument as missing.
+run "rejects_key_guardrail_without_a_key_when_it_is_the_only_statement" {
+  command = plan
+  variables {
+    deny_insecure_transport       = false
+    deny_incorrect_encryption_key = true
+  }
+  expect_failures = [aws_s3_bucket_server_side_encryption_configuration.this, aws_s3_bucket_policy.this]
+}
+
 run "rejects_object_lock_mode_outside_governance_and_compliance" {
   command = plan
   variables {

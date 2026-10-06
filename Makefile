@@ -4,9 +4,10 @@ SHELL := /bin/bash
 ROOT_DIRS     := . modules/bucket-policy
 # Only example directories that contain Terraform, so a stray file under examples/ is ignored.
 EXAMPLE_DIRS  := $(sort $(patsubst %/,%,$(dir $(wildcard examples/*/*.tf))))
-# Disposable fixtures for the credential-driven integration suites; validated
-# and linted like any module, excluded from policy scans (see .checkov.yml).
-FIXTURE_DIRS  := tests/integration/setup
+# Disposable fixtures for the credential-driven integration suites and the
+# contract tests; validated and linted like any module, excluded from policy
+# scans (see .checkov.yml).
+FIXTURE_DIRS  := tests/integration/setup tests/setup/key-and-bucket
 ALL_DIRS      := $(ROOT_DIRS) $(EXAMPLE_DIRS) $(FIXTURE_DIRS)
 TFLINT_CONFIG := $(CURDIR)/.tflint.hcl
 TFDOCS_CONFIG := $(CURDIR)/.terraform-docs.yml
